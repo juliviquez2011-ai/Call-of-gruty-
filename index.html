@@ -4,106 +4,202 @@
 <meta charset="UTF-8">
 <title>Gru vs Minions</title>
 <style>
-body,html{margin:0;padding:0;overflow:hidden;background:#111}
+body,html{margin:0;padding:0;overflow:hidden;background:#111;font-family:sans-serif}
 canvas{display:block;background:#222}
+.ui{
+position:absolute;top:10px;left:10px;color:#fff;font-size:24px;font-weight:bold;
+text-shadow:2px 2px 4px rgba(0,0,0,0.8);pointer-events:none;
+}
 </style>
 </head>
 <body>
+<div class="ui">Score: <span id="score">0</span></div>
 <canvas id="game"></canvas>
-<script>
-const canvas=document.getElementById('game');
-const ctx=canvas.getContext('2d');
-canvas.width=window.innerWidth;
-canvas.height=window.innerHeight;
 
-//--- Configuración ---
-const GRU={x:100,y:canvas.height-150,w:50,h:80,vy:0,jumpForce:-15,gravity:0.8,color:'#ff0'};
-const bullets=[];
-const minions=[];
-const obstacles=[];
-let keys={};
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const GRU = {
+x: 100,
+y: canvas.height - 150,
+w: 50,
+h: 80,
+vy: 0,
+jumpForce: -15,
+gravity: 0.8,
+speed: 5,
+color: '#ff0',
+onGround: true
+};
+
+const bullets = [];
+const minions = [];
+const obstacles = [];
+let keys = {};
+let score = 0;
+let gameOver = false;
 
 //--- Entrada ---
-window.addEventListener('keydown',e=>keys[e.key]=true);
-window.addEventListener('keyup',e=>keys[e.key]=false);
-canvas.addEventListener('click',()=>shoot());
+window.addEventListener('keydown', e => {
+keys[e.key] = true;
+if (e.key === ' ') e.preventDefault();
+});
+window.addEventListener('keyup', e => keys[e.key] = false);
+canvas.addEventListener('click', shoot);
 
-//--- Lógica ---
-function shoot(){
-bullets.push({x:GRU.x+GRU.w, y:GRU.y+GRU.h/2, vx:8, w:10, h:5});
+//--- Funciones ---
+function shoot() {
+if (gameOver) return;
+bullets.push({
+x: GRU.x + GRU.w,
+y: GRU.y + GRU.h / 2 - 2,
+vx: 10,
+w: 15,
+h: 5
+});
 }
-function spawnMinion(){
-const size=40;
-minions.push({x:canvas.width, y:canvas.height- size-50, w:size, h:size, speed:2});
+
+function spawnMinion() {
+if (gameOver) return;
+const size = 40;
+minions.push({
+x: canvas.width,
+y: canvas.height - size - 20,
+w: size,
+h: size,
+speed: 2 + Math.random() * 2
+});
 }
-function spawnObstacle(){
-const w=80, h=30;
-obstacles.push({x:canvas.width, y:canvas.height- h-20, w, h, speed:2});
+
+function spawnObstacle() {
+if (gameOver) return;
+const w = 30, h = 40;
+obstacles.push({
+x: canvas.width,
+y: canvas.height - h - 20,
+w,
+h,
+speed: 3
+});
 }
-setInterval(spawnMinion,2000);
-setInterval(spawnObstacle,3000);
+
+setInterval(spawnMinion, 1500);
+setInterval(spawnObstacle, 2500);
 
 //--- Bucle ---
-function update(){
-// movimiento Gru
-if(keys['ArrowRight']) GRU.x+=5;
-if(keys['ArrowLeft']) GRU.x-=5;
-if(keys[' '] && GRU.onGround){
-GRU.vy=GRU.jumpForce;
-GRU.onGround=false;
-}
-GRU.vy+=GRU.gravity;
-GRU.y+=GRU.vy;
-if(GRU.y+GRU.h>=canvas.height-20){
-GRU.y=canvas.height-20-GRU.h;
-GRU.vy=0;
-GRU.onGround=true;
+function update() {
+if (gameOver) return;
+
+// Movimiento de Gru
+if (keys['ArrowRight'] || keys['d']) GRU.x += GRU.speed;
+if (keys['ArrowLeft'] || keys['a']) GRU.x -= GRU.speed;
+
+GRU.x = Math.max(0, Math.min(GRU.x, canvas.width - GRU.w));
+
+// Salto
+if ((keys[' '] || keys['ArrowUp'] || keys['w']) && GRU.onGround) {
+GRU.vy = GRU.jumpForce;
+GRU.onGround = false;
 }
 
-// balas
-bullets.forEach((b,i)=>{ b.x+=b.vx; if(b.x>canvas.width) bullets.splice(i,1); });
+// Física vertical
+GRU.vy += GRU.gravity;
+GRU.y += GRU.vy;
 
-// minions
-minions.forEach((m,i)=>{ m.x-=m.speed; if(m.x+m.w<0) minions.splice(i,1); });
-
-// obstáculos
-obstacles.forEach((o,i)=>{ o.x-=o.speed; if(o.x+o.w<0) obstacles.splice(i,1); });
-
-// colisión bala‑minion
-bullets.forEach((b,bi)=>{
-minions.forEach((m,mi)=>{
-if(b.x<b.x+b.w && b.x+b.w>m.x && b.y<b.y+b.h && b.y+b.h>m.y){
-bullets.splice(bi,1);
-minions.splice(mi,1);
+if (GRU.y + GRU.h >= canvas.height - 20) {
+GRU.y = canvas.height - 20 - GRU.h;
+GRU.vy = 0;
+GRU.onGround = true;
 }
-});
-});
 
-// colisión Gru‑obstáculo
-obstacles.forEach(o=>{
-if(GRU.x<o.x+o.w && GRU.x+GRU.w>o.x && GRU.y<o.y+o.h && GRU.y+GRU.h>o.y){
-// simple reset
-GRU.x=100; GRU.y=canvas.height-150;
+// Balas
+for (let i = bullets.length - 1; i >= 0; i--) {
+const b = bullets[i];
+b.x += b.vx;
+if (b.x > canvas.width) bullets.splice(i, 1);
 }
-});
+
+// Minions
+for (let i = minions.length - 1; i >= 0; i--) {
+const m = minions[i];
+m.x -= m.speed;
+if (m.x + m.w < 0) minions.splice(i, 1);
 }
-function draw(){
-ctx.clearRect(0,0,canvas.width,canvas.height);
-// suelo
-ctx.fillStyle='#444'; ctx.fillRect(0,canvas.height-20,canvas.width,20);
+
+// Obstáculos
+for (let i = obstacles.length - 1; i >= 0; i--) {
+const o = obstacles[i];
+o.x -= o.speed;
+if (o.x + o.w < 0) obstacles.splice(i, 1);
+}
+
+// Colisión bala‑minion
+for (let bi = bullets.length - 1; bi >= 0; bi--) {
+const b = bullets[bi];
+for (let mi = minions.length - 1; mi >= 0; mi--) {
+const m = minions[mi];
+if (b.x < m.x + m.w &&
+b.x + b.w > m.x &&
+b.y < m.y + m.h &&
+b.y + b.h > m.y) {
+bullets.splice(bi, 1);
+minions.splice(mi, 1);
+score += 10;
+scoreEl.textContent = score;
+break;
+}
+}
+}
+
+// Colisión Gru‑obstáculo
+for (let i = 0; i < obstacles.length; i++) {
+const o = obstacles[i];
+if (GRU.x < o.x + o.w &&
+GRU.x + GRU.w > o.x &&
+GRU.y < o.y + o.h &&
+GRU.y + GRU.h > o.y) {
+gameOver = true;
+alert('¡Game Over! Puntuación: ' + score);
+break;
+}
+}
+}
+
+function draw() {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+// Suelo
+ctx.fillStyle = '#444';
+ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+
 // Gru
-ctx.fillStyle=GRU.color; ctx.fillRect(GRU.x,GRU.y,GRU.w,GRU.h);
-// balas
-ctx.fillStyle='#ff0';
-bullets.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));
-// minions
-ctx.fillStyle='purple';
-minions.forEach(m=>ctx.fillRect(m.x,m.y,m.w,m.h));
-// obstáculos
-ctx.fillStyle='brown';
-obstacles.forEach(o=>ctx.fillRect(o.x,o.y,o.w,o.h));
+ctx.fillStyle = GRU.color;
+ctx.fillRect(GRU.x, GRU.y, GRU.w, GRU.h);
+
+// Balas
+ctx.fillStyle = '#ff0';
+bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+// Minions
+ctx.fillStyle = 'purple';
+minions.forEach(m => ctx.fillRect(m.x, m.y, m.w, m.h));
+
+// Obstáculos
+ctx.fillStyle = 'brown';
+obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
 }
-function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+function loop() {
+update();
+draw();
+requestAnimationFrame(loop);
+}
+
 loop();
 </script>
 </body>
